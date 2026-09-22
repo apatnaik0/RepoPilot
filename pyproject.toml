@@ -1,0 +1,10 @@
+[project]
+name = "swe-agent-learning"
+version = "0.1.0"
+description = "A from-scratch software-engineering agent built for learning."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
