@@ -16,6 +16,19 @@ class Agent:
         self.registry = registry
         self.executor = ToolExecutor(registry)
 
+    def run(self, state: AgentState, max_steps: int = 20) -> AgentState:
+        """Run steps until completion or the configured step limit."""
+        if max_steps <= 0:
+            raise ValueError("max_steps must be greater than zero")
+
+        while state.status is AgentStatus.RUNNING and state.step_count < max_steps:
+            self.run_step(state)
+
+        if state.status is AgentStatus.RUNNING:
+            state.status = AgentStatus.MAX_STEPS
+
+        return state
+
     def run_step(self, state: AgentState) -> None:
         """Perform one model call and execute its requested tools."""
         if state.status is not AgentStatus.RUNNING:
@@ -61,4 +74,3 @@ class Agent:
             "content": result.output if result.success else result.error,
             "success": result.success,
         }
-

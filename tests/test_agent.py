@@ -9,9 +9,9 @@ from swe_agent.state import AgentState, AgentStatus
 from swe_agent.tools import RepositoryTools
 
 
-def make_agent(repository: Path, response: ModelResponse) -> Agent:
+def make_agent(repository: Path, *responses: ModelResponse) -> Agent:
     registry = RepositoryTools(repository).build_registry()
-    return Agent(ScriptedModelClient([response]), registry)
+    return Agent(ScriptedModelClient(responses), registry)
 
 
 def test_run_step_records_task_model_response_and_tool_result(tmp_path: Path) -> None:
@@ -80,3 +80,48 @@ def test_run_step_rejects_completed_agent(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="Cannot step an agent with status: completed"):
         agent.run_step(state)
+
+
+def test_run_repeats_steps_until_finish(tmp_path: Path) -> None:
+    inspect_response = ModelResponse(
+        tool_calls=(ToolCall(id="call-4", name="list_files", arguments={}),)
+    )
+    finish_response = ModelResponse(
+        tool_calls=(
+            ToolCall(
+                id="call-5",
+                name="finish",
+                arguments={"summary": "Repository inspected."},
+            ),
+        )
+    )
+    state = AgentState(task="Inspect the repository")
+
+    returned_state = make_agent(tmp_path, inspect_response, finish_response).run(state)
+
+    assert returned_state is state
+    assert state.step_count == 2
+    assert state.status is AgentStatus.COMPLETED
+    assert state.final_answer == "Repository inspected."
+
+
+def test_run_stops_at_maximum_steps(tmp_path: Path) -> None:
+    state = AgentState(task="Keep investigating")
+    agent = make_agent(
+        tmp_path,
+        ModelResponse(content="Still investigating."),
+        ModelResponse(content="Still investigating."),
+    )
+
+    agent.run(state, max_steps=2)
+
+    assert state.step_count == 2
+    assert state.status is AgentStatus.MAX_STEPS
+    assert state.final_answer is None
+
+
+def test_run_rejects_nonpositive_maximum(tmp_path: Path) -> None:
+    agent = make_agent(tmp_path)
+
+    with pytest.raises(ValueError, match="max_steps must be greater than zero"):
+        agent.run(AgentState(task="Anything"), max_steps=0)
