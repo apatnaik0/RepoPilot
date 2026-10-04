@@ -65,6 +65,45 @@ def test_cli_returns_failure_when_step_limit_is_reached(
     assert capsys.readouterr().out == "Status: max_steps\n"
 
 
+def test_cli_can_show_agent_trajectory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scripted_model = ScriptedModelClient(
+        [
+            ModelResponse(
+                content="I will inspect the files.",
+                tool_calls=(
+                    ToolCall(id="list-1", name="list_files", arguments={}),
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(cli, "OpenAIModelClient", lambda model: scripted_model)
+
+    cli.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--task",
+            "Inspect the repository",
+            "--model",
+            "test-model",
+            "--max-steps",
+            "1",
+            "--show-trajectory",
+        ]
+    )
+
+    assert capsys.readouterr().out == (
+        "\nStep 1\n"
+        "Assistant: I will inspect the files.\n"
+        "Tool call: list_files {}\n"
+        "Tool result (list_files, succeeded):\n"
+        "\n"
+        "Status: max_steps\n"
+    )
+
+
 def test_cli_rejects_invalid_repository(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as error:
         cli.main(
@@ -97,4 +136,3 @@ def test_cli_rejects_nonpositive_max_steps(tmp_path: Path) -> None:
         )
 
     assert error.value.code == 2
-
